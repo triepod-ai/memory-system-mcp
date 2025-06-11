@@ -1,0 +1,22 @@
+services:
+  memory-server:
+    build: .
+    container_name: memory_mcp_server
+    environment:
+      # Update these values to match your existing Neo4j instance
+      NEO4J_URI: neo4j://host.docker.internal:7687  # Or your Neo4j host/port
+      NEO4J_USER: neo4j                              # Your Neo4j username
+      NEO4J_PASSWORD: password             # Your Neo4j password
+      MEMORY_FILE_PATH: /app/dist/memory.json # Path inside the container for fallback
+    volumes:
+      - memory_fallback_data:/app/dist # Mount volume for fallback file persistence
+    restart: unless-stopped
+    # Enable if you need interactive access to the container
+    stdin_open: true
+    tty: true
+    # Use host networking if your Neo4j is on localhost
+    # network_mode: host
+
+volumes:
+  memory_fallback_data:
+

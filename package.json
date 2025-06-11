@@ -1,0 +1,40 @@
+{
+  "name": "@modelcontextprotocol/server-memory",
+  "version": "0.6.3",
+  "description": "MCP server for enabling memory for Claude through a knowledge graph",
+  "license": "MIT",
+  "author": "Trienexus",
+  "homepage": "https://modelcontextprotocol.io",
+  "bugs": "https://github.com/modelcontextprotocol/servers/issues",
+  "type": "module",
+  "bin": {
+    "mcp-server-memory": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "node --test tests/**/*.test.js",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js",
+    "test:validation": "node --test tests/validation/*.test.js",
+    "docker:build": "docker build -t mcp/memory .",
+    "docker:run": "./run-memory-container.sh",
+    "clean": "rm -rf dist/ logs/",
+    "migration": "node scripts/utils/migrate-to-neo4j.js",
+    "check-duplicates": "node scripts/utils/check-duplicates.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.0.1",
+    "neo4j-driver": "^5.22.0" 
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "shx": "^0.3.4",
+    "typescript": "^5.6.2"
+  }
+}
