@@ -66,3 +66,8 @@ temp/
 venv_3_12/
 venv/
 __pycache__/
+
+# Local development overrides (contains personal paths)
+docker-compose.override.yml
+run-memory-local.sh
+.env.local
