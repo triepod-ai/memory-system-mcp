@@ -242,6 +242,102 @@ This server uses the latest Model Context Protocol SDK with significant enhancem
 
 For complete MCP protocol documentation, see [Model Context Protocol](https://modelcontextprotocol.io/).
 
+## Error Codes
+
+This server implements consistent error codes following the JSON-RPC 2.0 specification that MCP is built on. This enables programmatic error handling and better client resilience.
+
+### Standard JSON-RPC 2.0 Error Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| `-32700` | Parse error | Invalid JSON received |
+| `-32600` | Invalid Request | JSON-RPC request is not valid |
+| `-32601` | Method not found | Tool does not exist |
+| `-32602` | Invalid params | Invalid tool parameters |
+| `-32603` | Internal error | Internal server error |
+
+### Server-Defined Error Codes (-32000 to -32099)
+
+#### Entity Errors
+| Code | Name | Description | Example |
+|------|------|-------------|---------|
+| `-32001` | `ENTITY_NOT_FOUND` | Requested entity does not exist | Adding observations to non-existent entity |
+| `-32002` | `DUPLICATE_ENTITY` | Entity already exists | (Reserved for future use) |
+
+#### Relation Errors
+| Code | Name | Description | Example |
+|------|------|-------------|---------|
+| `-32003` | `RELATION_NOT_FOUND` | Requested relation does not exist | (Reserved for future use) |
+| `-32004` | `INVALID_RELATION` | Relation structure is invalid | (Reserved for future use) |
+
+#### Storage Backend Errors
+| Code | Name | Description | Example |
+|------|------|-------------|---------|
+| `-32010` | `NEO4J_CONNECTION_ERROR` | Cannot connect to Neo4j | (Reserved for future use) |
+| `-32011` | `NEO4J_OPERATION_FAILED` | Neo4j query execution failed | Migration operation failure |
+| `-32012` | `FILE_STORAGE_ERROR` | File storage operation failed | (Reserved for future use) |
+
+#### Validation Errors
+| Code | Name | Description | Example |
+|------|------|-------------|---------|
+| `-32020` | `VALIDATION_ERROR` | Input validation failed | (Reserved for future use) |
+| `-32021` | `EMPTY_QUERY` | Search query is empty or whitespace | Empty search string provided |
+| `-32022` | `PARAMETER_OUT_OF_RANGE` | Parameter value outside valid range | `maxEntities = 150` (valid range: 1-100) |
+
+#### Query Errors
+| Code | Name | Description | Example |
+|------|------|-------------|---------|
+| `-32030` | `GRAPH_QUERY_TIMEOUT` | Query exceeded timeout limit | (Reserved for future use) |
+| `-32031` | `QUERY_EXECUTION_ERROR` | Query execution failed | (Reserved for future use) |
+
+### Error Response Format
+
+All errors follow the JSON-RPC 2.0 error response structure:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32001,
+    "message": "Entity with name Alice not found in Neo4j",
+    "data": {
+      "entityName": "Alice",
+      "backend": "neo4j"
+    }
+  }
+}
+```
+
+### Client Error Handling Example
+
+```typescript
+try {
+  await callTool("add_observations", {
+    observations: [{ entityName: "NonExistent", contents: ["observation"] }]
+  });
+} catch (error) {
+  if (error.code === -32001) {
+    // Handle entity not found - maybe create it first
+    console.log(`Entity not found: ${error.data.entityName}`);
+  } else if (error.code === -32602) {
+    // Handle invalid parameters
+    console.log("Invalid parameters provided");
+  } else if (error.code === -32022) {
+    // Handle parameter out of range
+    console.log(`Parameter ${error.data.parameter} out of range: ${error.data.range}`);
+  }
+}
+```
+
+### Benefits of Consistent Error Codes
+
+1. **Programmatic Handling**: Clients can handle specific errors without parsing messages
+2. **Retry Logic**: Implement smart retries based on error types (e.g., retry on `-32010` connection errors)
+3. **User Experience**: Provide specific, actionable error messages to end users
+4. **Debugging**: Track error patterns in logs and analytics
+5. **API Stability**: Error codes remain stable even if messages change
+
 ## Testing
 
 ```bash

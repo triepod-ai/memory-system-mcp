@@ -5,6 +5,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  McpError,
+  ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -26,6 +28,43 @@ const MEMORY_FILE_PATH = process.env.MEMORY_FILE_PATH
     ? process.env.MEMORY_FILE_PATH
     : path.join(path.dirname(fileURLToPath(import.meta.url)), process.env.MEMORY_FILE_PATH)
   : defaultMemoryPath;
+
+/**
+ * MCP Error Codes for Memory System
+ * Following JSON-RPC 2.0 specification
+ *
+ * Standard codes:
+ * -32700: Parse error
+ * -32600: Invalid Request
+ * -32601: Method not found
+ * -32602: Invalid params
+ * -32603: Internal error
+ *
+ * Server-defined codes (-32000 to -32099):
+ */
+const MCP_ERROR_CODES = {
+  // Entity-related errors
+  ENTITY_NOT_FOUND: -32001,
+  DUPLICATE_ENTITY: -32002,
+
+  // Relation-related errors
+  RELATION_NOT_FOUND: -32003,
+  INVALID_RELATION: -32004,
+
+  // Storage backend errors
+  NEO4J_CONNECTION_ERROR: -32010,
+  NEO4J_OPERATION_FAILED: -32011,
+  FILE_STORAGE_ERROR: -32012,
+
+  // Validation errors
+  VALIDATION_ERROR: -32020,
+  EMPTY_QUERY: -32021,
+  PARAMETER_OUT_OF_RANGE: -32022,
+
+  // Query errors
+  GRAPH_QUERY_TIMEOUT: -32030,
+  QUERY_EXECUTION_ERROR: -32031,
+} as const;
 
 // We are storing our memory using entities, relations, and observations in a graph structure
 interface Entity {
@@ -122,7 +161,10 @@ class KnowledgeGraphManager {
           result = await session.executeRead(neo4jReadCallback);
         } else {
           // Should not happen if called correctly, but handle defensively
-          throw new Error("No Neo4j operation provided");
+          throw new McpError(
+            ErrorCode.InternalError,
+            "No Neo4j operation provided"
+          );
         }
         this.lastOperationBackend = 'neo4j';
         return result; // Return result immediately after successful operation
@@ -280,7 +322,11 @@ class KnowledgeGraphManager {
           // Check if entity exists first
           const checkResult = await tx.run(`MATCH (e:Entity {name: $entityName}) RETURN count(e) as count`, { entityName: obs.entityName });
           if (checkResult.records[0].get('count').low === 0) { // Use .low for standard integers
-             throw new Error(`Entity with name ${obs.entityName} not found in Neo4j`);
+             throw new McpError(
+               MCP_ERROR_CODES.ENTITY_NOT_FOUND,
+               `Entity with name ${obs.entityName} not found in Neo4j`,
+               { entityName: obs.entityName, backend: 'neo4j' }
+             );
           }
 
           // Add observations, ensuring uniqueness within the list property
@@ -307,7 +353,11 @@ class KnowledgeGraphManager {
           if (!entity) {
             // Optionally create the entity if it doesn't exist in fallback? Or throw error?
             // Sticking to original behavior: throw error
-            throw new Error(`Entity with name ${o.entityName} not found in file`);
+            throw new McpError(
+              MCP_ERROR_CODES.ENTITY_NOT_FOUND,
+              `Entity with name ${o.entityName} not found in file`,
+              { entityName: o.entityName, backend: 'file' }
+            );
           }
           // Ensure observations array exists
           entity.observations = entity.observations || [];
@@ -1006,7 +1056,11 @@ class KnowledgeGraphManager {
               null,
               // Fallback - should not happen since we checked Neo4j availability
               async () => {
-                throw new Error('Neo4j operation failed during migration');
+                throw new McpError(
+                  MCP_ERROR_CODES.NEO4J_OPERATION_FAILED,
+                  'Neo4j operation failed during migration',
+                  { operation: 'entity migration' }
+                );
               }
             );
 
@@ -1079,7 +1133,11 @@ class KnowledgeGraphManager {
               null,
               // Fallback - should not happen since we checked Neo4j availability
               async () => {
-                throw new Error('Neo4j operation failed during migration');
+                throw new McpError(
+                  MCP_ERROR_CODES.NEO4J_OPERATION_FAILED,
+                  'Neo4j operation failed during migration',
+                  { operation: 'relation migration' }
+                );
               }
             );
 
@@ -1532,36 +1590,70 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Basic validation, more specific validation could be added per tool using JSON schema validation if needed
   // Allow tools with no arguments like read_graph and get_storage_status
   if (!args && name !== "read_graph" && name !== "get_graph_summary" && name !== "get_storage_status") {
-      throw new Error(`Arguments are required for tool: ${name}`);
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Arguments are required for tool: ${name}`,
+        { toolName: name }
+      );
   }
 
   try {
     let result: any; // To hold the result from the manager
     switch (name) {
       case "create_entities":
-        if (!args?.entities || !Array.isArray(args.entities)) throw new Error("Invalid arguments for create_entities: entities array is required.");
+        if (!args?.entities || !Array.isArray(args.entities)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for create_entities: entities array is required."
+          );
+        }
         result = await knowledgeGraphManager.createEntities(args.entities as Entity[]);
         break;
       case "create_relations":
-        if (!args?.relations || !Array.isArray(args.relations)) throw new Error("Invalid arguments for create_relations: relations array is required.");
+        if (!args?.relations || !Array.isArray(args.relations)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for create_relations: relations array is required."
+          );
+        }
         result = await knowledgeGraphManager.createRelations(args.relations as Relation[]);
         break;
       case "add_observations":
-        if (!args?.observations || !Array.isArray(args.observations)) throw new Error("Invalid arguments for add_observations: observations array is required.");
+        if (!args?.observations || !Array.isArray(args.observations)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for add_observations: observations array is required."
+          );
+        }
         result = await knowledgeGraphManager.addObservations(args.observations as { entityName: string; contents: string[] }[]);
         break;
       case "delete_entities":
-        if (!args?.entityNames || !Array.isArray(args.entityNames)) throw new Error("Invalid arguments for delete_entities: entityNames array is required.");
+        if (!args?.entityNames || !Array.isArray(args.entityNames)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for delete_entities: entityNames array is required."
+          );
+        }
         await knowledgeGraphManager.deleteEntities(args.entityNames as string[]);
         result = "Entities deleted successfully"; // Return confirmation message
         break;
       case "delete_observations":
-        if (!args?.deletions || !Array.isArray(args.deletions)) throw new Error("Invalid arguments for delete_observations: deletions array is required.");
+        if (!args?.deletions || !Array.isArray(args.deletions)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for delete_observations: deletions array is required."
+          );
+        }
         await knowledgeGraphManager.deleteObservations(args.deletions as { entityName: string; observations: string[] }[]);
         result = "Observations deleted successfully";
         break;
       case "delete_relations":
-        if (!args?.relations || !Array.isArray(args.relations)) throw new Error("Invalid arguments for delete_relations: relations array is required.");
+        if (!args?.relations || !Array.isArray(args.relations)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for delete_relations: relations array is required."
+          );
+        }
         await knowledgeGraphManager.deleteRelations(args.relations as Relation[]);
         result = "Relations deleted successfully";
         break;
@@ -1569,14 +1661,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Validate optional limit parameter
         if (args?.limit !== undefined) {
           if (typeof args.limit !== 'number' || !Number.isInteger(args.limit) || args.limit < 1) {
-            throw new Error("limit must be a positive integer");
+            throw new McpError(
+              MCP_ERROR_CODES.PARAMETER_OUT_OF_RANGE,
+              "limit must be a positive integer",
+              { parameter: "limit", value: args.limit }
+            );
           }
         }
 
         // Validate optional offset parameter
         if (args?.offset !== undefined) {
           if (typeof args.offset !== 'number' || !Number.isInteger(args.offset) || args.offset < 0) {
-            throw new Error("offset must be a non-negative integer");
+            throw new McpError(
+              MCP_ERROR_CODES.PARAMETER_OUT_OF_RANGE,
+              "offset must be a non-negative integer",
+              { parameter: "offset", value: args.offset }
+            );
           }
         }
 
@@ -1586,25 +1686,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         break;
       case "search_nodes":
-        if (!args || typeof args.query !== 'string') throw new Error("Invalid arguments for search_nodes: query string is required and cannot be empty.");
-        if (args.query.trim().length === 0) throw new Error("search_nodes query cannot be empty or only whitespace.");
+        if (!args || typeof args.query !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for search_nodes: query string is required and cannot be empty."
+          );
+        }
+        if (args.query.trim().length === 0) {
+          throw new McpError(
+            MCP_ERROR_CODES.EMPTY_QUERY,
+            "search_nodes query cannot be empty or only whitespace.",
+            { query: args.query }
+          );
+        }
         result = await knowledgeGraphManager.searchNodes(args.query as string);
         break;
       case "search_with_relationships":
-        if (!args || typeof args.query !== 'string') throw new Error("Invalid arguments for search_with_relationships: query string is required and cannot be empty.");
-        if (args.query.trim().length === 0) throw new Error("search_with_relationships query cannot be empty or only whitespace.");
-        
+        if (!args || typeof args.query !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for search_with_relationships: query string is required and cannot be empty."
+          );
+        }
+        if (args.query.trim().length === 0) {
+          throw new McpError(
+            MCP_ERROR_CODES.EMPTY_QUERY,
+            "search_with_relationships query cannot be empty or only whitespace.",
+            { query: args.query }
+          );
+        }
+
         // Validate maxEntities range
         if (args.maxEntities !== undefined) {
           if (typeof args.maxEntities !== 'number' || args.maxEntities < 1 || args.maxEntities > 100) {
-            throw new Error("maxEntities must be a number between 1 and 100. Use 5-10 for tight context windows, 15-25 for standard windows, 30-50 for large contexts.");
+            throw new McpError(
+              MCP_ERROR_CODES.PARAMETER_OUT_OF_RANGE,
+              "maxEntities must be a number between 1 and 100. Use 5-10 for tight context windows, 15-25 for standard windows, 30-50 for large contexts.",
+              { parameter: "maxEntities", value: args.maxEntities, range: "1-100" }
+            );
           }
         }
-        
+
         // Validate maxRelationshipsPerEntity range
         if (args.maxRelationshipsPerEntity !== undefined) {
           if (typeof args.maxRelationshipsPerEntity !== 'number' || args.maxRelationshipsPerEntity < 1 || args.maxRelationshipsPerEntity > 50) {
-            throw new Error("maxRelationshipsPerEntity must be a number between 1 and 50. Use 2-3 for minimal context, 4-6 for balanced analysis, 8-12 for comprehensive mapping.");
+            throw new McpError(
+              MCP_ERROR_CODES.PARAMETER_OUT_OF_RANGE,
+              "maxRelationshipsPerEntity must be a number between 1 and 50. Use 2-3 for minimal context, 4-6 for balanced analysis, 8-12 for comprehensive mapping.",
+              { parameter: "maxRelationshipsPerEntity", value: args.maxRelationshipsPerEntity, range: "1-50" }
+            );
           }
         }
         
@@ -1615,7 +1745,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         break;
       case "open_nodes":
-         if (!args || !Array.isArray(args.names)) throw new Error("Invalid arguments for open_nodes: names array is required.");
+        if (!args || !Array.isArray(args.names)) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Invalid arguments for open_nodes: names array is required."
+          );
+        }
         result = await knowledgeGraphManager.openNodes(args.names as string[]);
         break;
       case "get_graph_summary":
@@ -1625,7 +1760,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await knowledgeGraphManager.getStorageStatus();
         break;
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new McpError(
+          ErrorCode.MethodNotFound,
+          `Unknown tool: ${name}`,
+          { toolName: name }
+        );
     }
     // Return result, stringifying if it's an object/array
     return { content: [{ type: "text", text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }] };
