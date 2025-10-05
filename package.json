@@ -29,8 +29,8 @@
     "check-duplicates": "node scripts/utils/check-duplicates.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.0.1",
-    "neo4j-driver": "^5.22.0" 
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "neo4j-driver": "^5.22.0"
   },
   "devDependencies": {
     "@types/node": "^22",

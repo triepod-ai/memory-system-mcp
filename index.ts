@@ -1198,6 +1198,48 @@ const relationSchema = {
     required: ["from", "to", "relationType"],
 };
 
+// Output schemas for type-safe responses (MCP 2025-06-18 feature)
+const entityOutputSchema = {
+    type: "object",
+    properties: {
+        name: { type: "string", description: "The name of the entity" },
+        entityType: { type: "string", description: "The type of the entity" },
+        observations: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of observation contents associated with the entity"
+        },
+    },
+    required: ["name", "entityType", "observations"],
+};
+
+const relationOutputSchema = {
+    type: "object",
+    properties: {
+        from: { type: "string", description: "The name of the entity where the relation starts" },
+        to: { type: "string", description: "The name of the entity where the relation ends" },
+        relationType: { type: "string", description: "The type of the relation" },
+    },
+    required: ["from", "to", "relationType"],
+};
+
+const knowledgeGraphOutputSchema = {
+    type: "object",
+    properties: {
+        entities: {
+            type: "array",
+            items: entityOutputSchema,
+            description: "Array of entities in the knowledge graph"
+        },
+        relations: {
+            type: "array",
+            items: relationOutputSchema,
+            description: "Array of relations between entities"
+        },
+    },
+    required: ["entities", "relations"],
+};
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   // Tools remain largely the same, description might be updated to mention Neo4j/fallback
   return {
@@ -1207,8 +1249,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "Create multiple new entities in the knowledge graph (Neo4j primary, file fallback)",
         inputSchema: {
           type: "object",
-          properties: { entities: { type: "array", items: entitySchema } },
+          properties: { entities: { type: "array", items: entitySchema, description: "An array of entity objects to create in the knowledge graph" } },
           required: ["entities"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            entities: {
+              type: "array",
+              items: entityOutputSchema,
+              description: "Array of successfully created entities"
+            }
+          },
+          required: ["entities"]
         },
       },
       {
@@ -1216,8 +1269,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "Create multiple new relations between entities (Neo4j primary, file fallback). Relations should be in active voice",
         inputSchema: {
           type: "object",
-          properties: { relations: { type: "array", items: relationSchema } },
+          properties: { relations: { type: "array", items: relationSchema, description: "An array of relation objects to create between entities in the knowledge graph" } },
           required: ["relations"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            relations: {
+              type: "array",
+              items: relationOutputSchema,
+              description: "Array of successfully created relations"
+            }
+          },
+          required: ["relations"]
         },
       },
       {
@@ -1228,6 +1292,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             observations: {
               type: "array",
+              description: "An array of objects, each specifying an entity and the observation contents to add to it",
               items: {
                 type: "object",
                 properties: {
@@ -1240,6 +1305,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["observations"],
         },
+        outputSchema: {
+          type: "object",
+          properties: {
+            results: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  entityName: { type: "string", description: "Name of the entity that was updated" },
+                  addedObservations: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of observations that were successfully added (excluding duplicates)"
+                  }
+                },
+                required: ["entityName", "addedObservations"]
+              },
+              description: "Results showing which observations were added to each entity"
+            }
+          },
+          required: ["results"]
+        },
       },
       {
         name: "delete_entities",
@@ -1248,6 +1335,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: { entityNames: { type: "array", items: { type: "string" }, description: "An array of entity names to delete" } },
           required: ["entityNames"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description: "Success confirmation message"
+            }
+          },
+          required: ["message"]
         },
       },
       {
@@ -1258,6 +1355,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             deletions: {
               type: "array",
+              description: "An array of objects, each specifying an entity and the observations to delete from it",
               items: {
                 type: "object",
                 properties: {
@@ -1270,6 +1368,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["deletions"],
         },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description: "Success confirmation message"
+            }
+          },
+          required: ["message"]
+        },
       },
       {
         name: "delete_relations",
@@ -1278,6 +1386,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: { relations: { type: "array", items: relationSchema, description: "An array of relations to delete" } },
           required: ["relations"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description: "Success confirmation message"
+            }
+          },
+          required: ["message"]
         },
       },
       {
@@ -1289,7 +1407,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             limit: { type: "number", description: "Maximum number of entities to return" },
             offset: { type: "number", description: "Number of entities to skip (for pagination)" }
           }
-        }
+        },
+        outputSchema: knowledgeGraphOutputSchema,
       },
       {
         name: "search_nodes",
@@ -1299,19 +1418,47 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: { query: { type: "string", description: "Search query to match against entity names, types, and observation content using case-insensitive partial matching. Will search across all entities without limits - consider search_with_relationships for large datasets or bounded results." } },
           required: ["query"],
         },
+        outputSchema: knowledgeGraphOutputSchema,
       },
       {
         name: "search_with_relationships",
         description: "Context-safe knowledge graph search with bounded relationship discovery to prevent overwhelming results. WHEN TO USE: Large datasets (>50 entities expected), when you need relationship context, tight context windows, or adaptive behavior based on result size. SELECTION CRITERIA: Choose for complex analysis, relationship mapping, or when context management is critical. BOUNDED RESULTS: maxEntities (default: 20) and maxRelationshipsPerEntity (default: 5) prevent result explosion. METADATA TRANSPARENCY: Returns totalEntitiesFound, relationshipsLimited flag, and backendUsed for adaptive behavior. FALLBACK STRATEGY: Falls back to simple search on query failures, then to file storage if Neo4j unavailable.",
         inputSchema: {
           type: "object",
-          properties: { 
+          properties: {
             query: { type: "string", description: "Search query to match against entity names, types, and observation content using case-insensitive partial matching. Results will be bounded by maxEntities and maxRelationshipsPerEntity parameters." },
             maxEntities: { type: "number", description: "Maximum number of entities to return for context management (default: 20). Use 5-10 for tight context windows (~16K tokens), 15-25 for standard windows (~32K tokens), 30-50 for large context windows (~128K+ tokens).", default: 20 },
             maxRelationshipsPerEntity: { type: "number", description: "Maximum relationships per entity to prevent relationship explosion (default: 5). Use 2-3 for minimal context usage, 4-6 for balanced analysis, 8-12 for comprehensive relationship mapping. Higher values increase token usage exponentially.", default: 5 },
             fallbackToSimple: { type: "boolean", description: "Automatically fallback to simple search if enhanced search fails (default: true). Recommended to keep enabled for reliability.", default: true }
           },
           required: ["query"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            entities: {
+              type: "array",
+              items: entityOutputSchema,
+              description: "Array of matching entities"
+            },
+            relations: {
+              type: "array",
+              items: relationOutputSchema,
+              description: "Array of relations between matching entities (bounded by maxRelationshipsPerEntity)"
+            },
+            metadata: {
+              type: "object",
+              properties: {
+                totalEntitiesFound: { type: "number", description: "Total number of entities that matched the query" },
+                relationshipsLimited: { type: "boolean", description: "True if relationship results were truncated due to maxRelationshipsPerEntity limit" },
+                backendUsed: { type: "string", enum: ["neo4j", "file"], description: "Storage backend that was used for this query" }
+              },
+              required: ["totalEntitiesFound", "relationshipsLimited", "backendUsed"],
+              description: "Metadata about search execution and result bounding"
+            }
+          },
+          required: ["entities", "relations", "metadata"],
+          description: "Knowledge graph search results with metadata for adaptive behavior"
         },
       },
       {
@@ -1322,36 +1469,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: { names: { type: "array", items: { type: "string" }, description: "An array of entity names to retrieve" } },
           required: ["names"],
         },
+        outputSchema: knowledgeGraphOutputSchema,
       },
       {
         name: "get_graph_summary",
         description: "Get summary statistics of the knowledge graph (Neo4j primary, file fallback)",
-        inputSchema: { type: "object", properties: {} }
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: {
+          type: "object",
+          properties: {
+            entityCount: { type: "number", description: "Total number of entities in the graph" },
+            relationCount: { type: "number", description: "Total number of relations in the graph" },
+            entityTypes: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of unique entity types in the graph (sorted alphabetically)"
+            }
+          },
+          required: ["entityCount", "relationCount", "entityTypes"],
+          description: "Summary statistics of the knowledge graph"
+        },
       },
       {
         name: "get_storage_status",
         description: "Get current storage backend status and connection information",
-        inputSchema: { type: "object", properties: {} }
-      },
-      {
-        name: "migrate_fallback_to_neo4j",
-        description: "Migrate data from fallback file to Neo4j database with comprehensive logging and cross-references",
-        inputSchema: {
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: {
           type: "object",
           properties: {
-            dryRun: { 
-              type: "boolean", 
-              description: "If true, performs a dry run without making changes", 
-              default: false 
-            },
-            conflictResolution: {
+            currentBackend: { type: "string", enum: ["neo4j", "file"], description: "Currently active storage backend" },
+            lastOperationBackend: { type: "string", enum: ["neo4j", "file"], description: "Backend used for the last operation" },
+            neo4jConfigured: { type: "boolean", description: "Whether Neo4j connection is configured via environment variables" },
+            neo4jAvailable: { type: "boolean", description: "Whether Neo4j is currently available and connected" },
+            filePath: { type: "string", description: "Path to the fallback JSON file" },
+            backendConsistent: { type: "boolean", description: "Whether current backend matches last operation backend" },
+            connectionHealth: {
               type: "string",
-              enum: ["skip", "overwrite", "merge"],
-              description: "How to handle conflicts: skip existing, overwrite, or merge observations",
-              default: "merge"
+              enum: ["healthy", "degraded", "unavailable"],
+              description: "Overall connection health status"
+            },
+            configuration: {
+              type: "object",
+              properties: {
+                NEO4J_URI: { type: "string", description: "Neo4j connection URI (password masked if present)" },
+                NEO4J_USER: { type: "string", description: "Neo4j username" },
+                MEMORY_FILE_PATH: { type: "string", description: "Fallback file path" }
+              },
+              description: "Current configuration details"
             }
-          }
-        }
+          },
+          required: ["currentBackend", "lastOperationBackend", "neo4jConfigured", "neo4jAvailable", "filePath", "backendConsistent", "connectionHealth", "configuration"],
+          description: "Detailed storage backend status and health information"
+        },
       },
     ]
   };
@@ -1362,7 +1531,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // Basic validation, more specific validation could be added per tool using JSON schema validation if needed
   // Allow tools with no arguments like read_graph and get_storage_status
-  if (!args && name !== "read_graph" && name !== "get_graph_summary" && name !== "get_storage_status" && name !== "migrate_fallback_to_neo4j") {
+  if (!args && name !== "read_graph" && name !== "get_graph_summary" && name !== "get_storage_status") {
       throw new Error(`Arguments are required for tool: ${name}`);
   }
 
@@ -1397,8 +1566,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = "Relations deleted successfully";
         break;
       case "read_graph":
+        // Validate optional limit parameter
+        if (args?.limit !== undefined) {
+          if (typeof args.limit !== 'number' || !Number.isInteger(args.limit) || args.limit < 1) {
+            throw new Error("limit must be a positive integer");
+          }
+        }
+
+        // Validate optional offset parameter
+        if (args?.offset !== undefined) {
+          if (typeof args.offset !== 'number' || !Number.isInteger(args.offset) || args.offset < 0) {
+            throw new Error("offset must be a non-negative integer");
+          }
+        }
+
         result = await knowledgeGraphManager.readGraph(
-          args?.limit as number | undefined, 
+          args?.limit as number | undefined,
           args?.offset as number | undefined
         );
         break;
@@ -1440,12 +1623,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_storage_status":
         result = await knowledgeGraphManager.getStorageStatus();
-        break;
-      case "migrate_fallback_to_neo4j":
-        result = await knowledgeGraphManager.migrateFallbackToNeo4j({
-          dryRun: args?.dryRun as boolean | undefined,
-          conflictResolution: args?.conflictResolution as 'skip' | 'overwrite' | 'merge' | undefined
-        });
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
