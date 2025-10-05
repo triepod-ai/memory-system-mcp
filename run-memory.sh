@@ -3,8 +3,11 @@
 # Memory MCP Server Wrapper Script
 # This script runs the memory MCP server from the current directory
 
-# Log redirection setup
-LOG_DIR="./logs"
+# MCP protocol compliance setup
+set -euo pipefail
+
+# Log redirection setup (following MCP wrapper patterns)
+LOG_DIR="$HOME/.memory-mcp/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/memory-mcp-$(date +%Y%m%d-%H%M%S).log"
 
@@ -24,12 +27,20 @@ cd "$SCRIPT_DIR"
 
 # Ensure the project is built
 if [ ! -d "dist" ]; then
-    echo "Building project..."
-    npm install
-    npm run build
+    echo "Building project..." >&2
+    npm install >&2
+    npm run build >&2
 fi
 
-# Run the memory server
-# Note: Removed stderr redirection to maintain MCP protocol compliance
-# All logging is now handled via file-based logger in the application
-exec node dist/index.js "$@"
+# Log startup information to log file (not stderr to keep stdio clean)
+{
+    echo "Memory MCP Server starting..."
+    echo "Running from directory: $SCRIPT_DIR"
+    echo "Neo4j URI: $NEO4J_URI"
+    echo "Logging to: $LOG_FILE"
+    echo "---"
+} >> "$LOG_FILE"
+
+# Run the memory server with stderr redirected to log file
+# stdout remains clean for MCP JSON-RPC protocol
+exec node dist/index.js "$@" 2>> "$LOG_FILE"
