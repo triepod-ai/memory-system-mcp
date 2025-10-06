@@ -7,6 +7,8 @@ import {
   ListToolsRequestSchema,
   McpError,
   ErrorCode,
+  SetLevelRequestSchema,
+  LoggingLevel,
 } from "@modelcontextprotocol/sdk/types.js";
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -1225,8 +1227,21 @@ const server = new Server({
 },    {
     capabilities: {
       tools: {}, // Tools are defined below via setRequestHandler
+      logging: {}, // Enable logging notifications
     },
   },);
+
+// --- Logging Configuration ---
+// Wire up the logger to send MCP notifications
+logger.setMcpServer(server);
+logger.setLoggingLevel("info");
+
+server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+  const level = request.params.level;
+  logger.setLoggingLevel(level);
+  logger.info(`Logging level set to: ${level}`);
+  return {};
+});
 
 // --- Tool Definitions and Handlers ---
 
