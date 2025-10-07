@@ -15,6 +15,28 @@ Knowledge graph memory system with Neo4j/file storage fallback and type-safe str
 - **Context-Aware Search**: Bounded queries prevent token window overflow
 - **Auto-Failover**: Seamless fallback when Neo4j unavailable
 
+## What Makes This Fork Different
+
+This fork extends the original memory-mcp with production-ready enhancements focused on developer experience, observability, and protocol compliance:
+
+### 1. **MCP Logging Notifications**
+Real-time log streaming through MCP protocol with dynamic level control. Clients receive structured log notifications (error/info/warning) without server restart. Perfect for debugging and production monitoring.
+
+### 2. **Consistent Error Code System**
+JSON-RPC 2.0 compliant error codes (-32001 to -32099) enable programmatic error handling. Clients can implement smart retry logic, specific error handling, and better user experiences based on error types (entity not found, validation errors, backend failures, etc.).
+
+### 3. **Structured Output Schemas**
+All 12 tools include type-safe `outputSchema` declarations per MCP 2025-06-18 spec. LLMs understand response formats before calling tools, improving context efficiency and integration reliability.
+
+### 4. **Production-Ready Wrapper Scripts**
+MCP-compliant wrapper scripts (`run-memory.sh`) with proper stdio handling, logging redirection, and environment management. Ready for deployment with Claude Desktop or other MCP clients.
+
+### 5. **Comprehensive Developer Documentation**
+Working examples in `docs/development/CLAUDE.md` demonstrate real-world usage patterns: entity creation workflows, debugging with storage status, bounded relationship searches, and context window management.
+
+### 6. **Latest MCP SDK (1.18.2)**
+Upgraded from SDK 1.0.1 to 1.18.2 (18 major versions), bringing OAuth support, audio content handling, enhanced error handling, CORS configuration, and middleware composition.
+
 ## Installation
 
 ### Prerequisites

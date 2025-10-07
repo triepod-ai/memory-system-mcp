@@ -71,3 +71,7 @@ __pycache__/
 docker-compose.override.yml
 run-memory-local.sh
 .env.local
+
+# Test data and temporary test files
+test_*.json
+cleanup-memory-mcp-tests.js
