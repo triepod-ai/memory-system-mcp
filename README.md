@@ -2,7 +2,7 @@
 
 Knowledge graph memory system with Neo4j/file storage fallback and type-safe structured outputs.
 
-**Author**: Trienexus
+**Author**: triepod.ai
 **License**: MIT
 **MCP SDK**: 1.18.2
 
