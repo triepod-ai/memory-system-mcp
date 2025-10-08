@@ -1,5 +1,9 @@
 FROM node:22.12-alpine AS builder
 
+# Cache bust for code changes
+ARG CACHEBUST=1
+RUN echo "Cache bust: $CACHEBUST"
+
 COPY . /app
 # Removed the problematic circular reference line
 # COPY tsconfig.json /tsconfig.json
