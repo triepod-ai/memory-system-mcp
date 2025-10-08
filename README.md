@@ -88,6 +88,142 @@ npm start
 
 The MCP server is now running and ready to accept tool calls via the Model Context Protocol.
 
+## Docker Deployment (Recommended)
+
+For production use, Docker deployment provides isolation, consistency, and easy integration with existing Neo4j containers.
+
+### Prerequisites
+
+- **Docker**: v20.10+ with docker-compose
+- **Existing Neo4j Container**: Running on Docker network (or use `host.docker.internal`)
+
+### Quick Start
+
+```bash
+# Build and start the container
+docker-compose up -d memory-server
+
+# Verify container is running
+docker ps --filter "name=memory_mcp_server"
+```
+
+### Docker Architecture
+
+The setup uses a **docker-exec pattern** for stdio transport:
+- Container runs `tail -f /dev/null` to stay alive
+- Wrapper script executes `docker exec -i memory_mcp_server node dist/index.js`
+- Clean stdio channel for MCP JSON-RPC protocol
+
+### Configuration
+
+**docker-compose.yml** environment variables:
+
+```yaml
+environment:
+  NEO4J_URI: neo4j://neo4j:7687      # Neo4j via Docker network
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: password
+  MEMORY_FILE_PATH: /app/data/memory.json
+  NODE_ENV: production
+```
+
+**Networking:**
+- Connects to `neo4j_neo4j-network` (existing Neo4j network)
+- Update `docker-compose.yml` if your Neo4j uses a different network
+
+**Volume Mounts:**
+- `memory_fallback_data:/app/data` - Persistent fallback storage
+- `./logs:/app/logs` - Container logs for debugging
+
+### Wrapper Script
+
+Create `~/run-memory-docker.sh`:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+LOG_DIR="$HOME/.memory-docker-mcp/logs"
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+LOG_FILE="$LOG_DIR/memory-docker-mcp-$(date +%Y%m%d-%H%M%S).log"
+
+CONTAINER_NAME="memory_mcp_server"
+
+# Check container is running
+if ! docker ps --format "{{.Names}}" 2>> "$LOG_FILE" | grep -q "^${CONTAINER_NAME}$"; then
+    {
+        echo "Error: ${CONTAINER_NAME} Docker container is not running"
+        echo "Please start: cd ~/mcp-servers/memory-mcp && docker-compose up -d"
+    } >> "$LOG_FILE" 2>&1
+    exit 1
+fi
+
+# Execute MCP server via docker exec
+exec docker exec -i \
+    -e NODE_ENV="${NODE_ENV:-production}" \
+    -e NEO4J_URI="${NEO4J_URI:-neo4j://neo4j:7687}" \
+    -e NEO4J_USER="${NEO4J_USER:-neo4j}" \
+    -e NEO4J_PASSWORD="${NEO4J_PASSWORD:-password}" \
+    -e MEMORY_FILE_PATH="${MEMORY_FILE_PATH:-/app/data/memory.json}" \
+    "${CONTAINER_NAME}" node dist/index.js "$@" 2>> "$LOG_FILE"
+```
+
+```bash
+chmod +x ~/run-memory-docker.sh
+```
+
+### Claude Desktop Integration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "/home/bryan/run-memory-docker.sh"
+    }
+  }
+}
+```
+
+### Resource Management
+
+Container includes:
+- **Memory limits**: 512M max, 128M reservation
+- **Log rotation**: 10MB max size, 3 files retained
+- **Auto-restart**: Container restarts unless explicitly stopped
+
+### Troubleshooting
+
+**Check container logs:**
+```bash
+docker logs memory_mcp_server --tail 50
+```
+
+**Check wrapper logs:**
+```bash
+ls -lt ~/.memory-docker-mcp/logs/*.log | head -1 | xargs tail -20
+```
+
+**Verify Neo4j connectivity:**
+```bash
+docker exec memory_mcp_server wget -qO- http://neo4j:7474 && echo "✓ Connected"
+```
+
+**Rebuild after code changes:**
+```bash
+docker-compose build --build-arg CACHEBUST=$(date +%s) memory-server
+docker-compose restart memory-server
+```
+
+### Why Docker?
+
+- **Isolation**: Separate runtime environment from host system
+- **Consistency**: Same environment in dev/staging/production
+- **Integration**: Easy connection to Neo4j via Docker networking
+- **Resource Control**: Memory/CPU limits prevent runaway processes
+- **Clean Protocol**: Stderr redirected to logs, stdout pristine for MCP
+
 ## Usage Examples
 
 ### Example 1: Creating Entities and Relations
