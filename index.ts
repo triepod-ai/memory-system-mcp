@@ -116,7 +116,7 @@ class KnowledgeGraphManager {
     }
     try {
         await this.driver.verifyConnectivity();
-        logger.info("Successfully connected to Neo4j.");
+        console.error("Successfully connected to Neo4j."); // Startup logging to stderr
         this.neo4jAvailable = true;
         await this.ensureConstraintsAndIndexes(); // Ensure constraints/indexes exist
     } catch (error) {
@@ -138,7 +138,7 @@ class KnowledgeGraphManager {
       await this.driver.executeQuery(
           'CREATE INDEX entity_type_index IF NOT EXISTS FOR (e:Entity) ON (e.entityType)'
       ); // executeQuery doesn't return an object with .execute()
-      logger.info("Ensured Neo4j constraints and indexes exist.");
+      console.error("Ensured Neo4j constraints and indexes exist."); // Startup logging to stderr
     } catch (error: any) { // Add type annotation
       logger.error("Failed to ensure Neo4j constraints/indexes", error instanceof Error ? error : new Error(String(error)));
       // Decide if this failure should disable Neo4j usage - potentially set neo4jAvailable to false
@@ -1797,7 +1797,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  logger.info("Knowledge Graph MCP Server (Neo4j/File Fallback) running on stdio"); // Updated log message
+  console.error("Knowledge Graph MCP Server (Neo4j/File Fallback) running on stdio"); // Startup logging to stderr
 }
 
 main().catch((error) => {
