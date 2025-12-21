@@ -498,12 +498,149 @@ try {
 
 ## Testing
 
+### Running Test Suites
+
 ```bash
 npm test                 # All tests
 npm run test:unit        # Unit tests only
 npm run test:integration # Integration tests
 npm run test:validation  # Validation tests
 ```
+
+### Quick Start for Reviewers
+
+The server works out of the box with file-based storage (no Neo4j required):
+
+```bash
+# 1. Install and build
+npm install && npm run build
+
+# 2. Test server starts correctly
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
+
+# 3. Verify 12 tools are returned with annotations
+```
+
+### Sample Test Data
+
+Use this sample data to test all CRUD operations:
+
+```json
+{
+  "testEntities": [
+    {
+      "name": "TestProject",
+      "entityType": "project",
+      "observations": ["Created for testing", "Uses TypeScript"]
+    },
+    {
+      "name": "TestUser",
+      "entityType": "person",
+      "observations": ["Developer", "Runs tests"]
+    }
+  ],
+  "testRelations": [
+    {
+      "from": "TestUser",
+      "to": "TestProject",
+      "relationType": "maintains"
+    }
+  ]
+}
+```
+
+### MCP Protocol Testing
+
+Test tools directly via stdio:
+
+```bash
+# Create an entity
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_entities","arguments":{"entities":[{"name":"TestEntity","entityType":"test","observations":["Sample observation"]}]}}}' | node dist/index.js
+
+# Search for it
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_nodes","arguments":{"query":"TestEntity"}}}' | node dist/index.js
+
+# Get graph summary
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_graph_summary","arguments":{}}}' | node dist/index.js
+
+# Clean up
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"delete_entities","arguments":{"entityNames":["TestEntity"]}}}' | node dist/index.js
+```
+
+### Testing with Neo4j (Optional)
+
+For Neo4j integration testing:
+
+```bash
+# Start Neo4j (Docker)
+docker run -d --name neo4j-test \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/testpassword \
+  neo4j:5
+
+# Configure environment
+export NEO4J_URI=neo4j://localhost:7687
+export NEO4J_USER=neo4j
+export NEO4J_PASSWORD=testpassword
+
+# Run server (will use Neo4j)
+node dist/index.js
+```
+
+### Verification Checklist
+
+| Test | Command | Expected |
+|------|---------|----------|
+| Server starts | `node dist/index.js` | No errors on stderr |
+| Tools list | `tools/list` request | 12 tools with annotations |
+| Create entity | `create_entities` call | Returns created entity |
+| Search works | `search_nodes` call | Returns matching entities |
+| Delete works | `delete_entities` call | Returns success message |
+| Error handling | Empty query | Error code -32021 |
+| Bounds validation | maxEntities=150 | Error code -32022 |
+
+### Test File Location
+
+Test data is stored in `memory_fallback.json` (auto-created in dist/ directory). Delete this file to reset test state:
+
+```bash
+rm dist/memory_fallback.json
+```
+
+## Data Privacy
+
+This server stores data **locally only** - no external services are contacted:
+
+- **File Storage**: Data stored in `memory_fallback.json` on your local filesystem
+- **Neo4j Storage**: Data stored in your local/self-hosted Neo4j instance
+- **No Telemetry**: No usage data, analytics, or metrics sent externally
+- **No External APIs**: Server operates entirely offline after installation
+
+### Data Location
+
+| Backend | Default Path | Configurable Via |
+|---------|--------------|------------------|
+| File | `dist/memory_fallback.json` | `MEMORY_FILE_PATH` env var |
+| Neo4j | Your Neo4j instance | `NEO4J_URI` env var |
+
+### Data Deletion
+
+To completely remove all stored data:
+
+```bash
+# File storage
+rm dist/memory_fallback.json
+
+# Neo4j (if used)
+# Use Neo4j Browser or cypher-shell:
+# MATCH (n) DETACH DELETE n
+```
+
+### What Data is Stored
+
+- **Entities**: name, type, observations (user-provided strings)
+- **Relations**: from, to, relation type (user-defined connections)
+- **No metadata**: No timestamps, user IDs, or tracking information
 
 ## Documentation
 - [Architecture Guide](docs/architecture/)
