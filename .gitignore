@@ -26,6 +26,7 @@ out/
 *.key
 credentials.json
 *config*.json
+!tsconfig.json
 
 # Neo4j related
 neo4j/data/
