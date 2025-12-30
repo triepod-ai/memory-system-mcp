@@ -671,8 +671,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           { toolName: name }
         );
     }
-    // Return result, stringifying if it's an object/array
-    return { content: [{ type: "text", text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }] };
+    // Return result with both text content (backward compat) and structuredContent (MCP 2025-06-18)
+    return {
+      content: [{ type: "text", text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }],
+      structuredContent: typeof result === 'object' ? result : undefined
+    };
 
   } catch (error) {
       logger.error(`Error executing tool ${name}`, error instanceof Error ? error : new Error(String(error)));
